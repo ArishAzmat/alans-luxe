@@ -3,8 +3,22 @@
 import React from 'react'
 import Link from 'next/link'
 import { ArrowRight, Sparkles, ShieldCheck, Truck } from 'lucide-react'
+import { useProductsQuery } from '@/lib/api/queries'
+import { mapApiProductToProduct } from '@/lib/products'
 
 export function HeroBanner() {
+  const { data: apiResponse } = useProductsQuery({ featured: true, limit: 2 })
+
+  const featured = React.useMemo(() => {
+    if (apiResponse?.data && apiResponse.data.length > 0) {
+      return apiResponse.data.map(mapApiProductToProduct)
+    }
+    return []
+  }, [apiResponse])
+
+  const leftImage = featured[0]?.image || 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=85'
+  const rightImage = featured[1]?.image || 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=85'
+
   const scrollToGrid = () => {
     const grid = document.getElementById('products-section')
     if (grid) {
@@ -22,16 +36,16 @@ export function HeroBanner() {
         {/* Decorative Bag Images on Left & Right (like Zouk banner screenshot) */}
         <div className="hidden md:block absolute left-4 lg:left-16 bottom-0 max-w-[260px] lg:max-w-[320px] h-[85%] z-10 pointer-events-none transition-transform hover:scale-105 duration-500">
           <img
-            src="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=85"
-            alt="Artisan Floral Backpack"
+            src={leftImage}
+            alt={featured[0]?.name || 'Featured Luxury Bag'}
             className="h-full w-full object-contain drop-shadow-2xl"
           />
         </div>
 
         <div className="hidden md:block absolute right-4 lg:right-16 bottom-0 max-w-[260px] lg:max-w-[320px] h-[85%] z-10 pointer-events-none transition-transform hover:scale-105 duration-500">
           <img
-            src="https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=85"
-            alt="The Athena Top Handle"
+            src={rightImage}
+            alt={featured[1]?.name || 'Featured Luxury Silhouette'}
             className="h-full w-full object-contain drop-shadow-2xl"
           />
         </div>

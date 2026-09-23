@@ -3,7 +3,8 @@
 import React from 'react'
 import Link from 'next/link'
 import { Sparkles, ArrowRight } from 'lucide-react'
-import { getFeaturedProducts } from '@/lib/products'
+import { Product, mapApiProductToProduct } from '@/lib/products'
+import { useProductsQuery } from '@/lib/api/queries'
 import { ProductCard } from '@/components/product-card'
 
 interface FeaturedProductsProps {
@@ -11,15 +12,63 @@ interface FeaturedProductsProps {
   subtitle?: string
   limit?: number
   viewAllHref?: string
+  products?: Product[]
 }
 
 export function FeaturedProducts({
-  title = 'Featured Collections',
+  title = 'Featured Collection',
   subtitle = 'Iconic silhouettes hand-selected for the season',
   limit = 4,
-  viewAllHref = '/backpacks',
+  viewAllHref = '/#products-section',
+  products: passedProducts,
 }: FeaturedProductsProps) {
-  const featured = getFeaturedProducts().slice(0, limit)
+  // Query backend for featured products if not passed directly
+  const { data: apiResponse, isLoading } = useProductsQuery(
+    passedProducts ? undefined : { featured: true, limit }
+  )
+
+  const featured = React.useMemo<Product[]>(() => {
+    if (passedProducts) {
+      return passedProducts.filter((p) => p.featured).slice(0, limit)
+    }
+    if (apiResponse?.data && apiResponse.data.length > 0) {
+      return apiResponse.data.map(mapApiProductToProduct).slice(0, limit)
+    }
+    return []
+  }, [passedProducts, apiResponse, limit])
+
+  if (isLoading && !passedProducts) {
+    return (
+      <section className="py-10 sm:py-14 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#C7A45C] mb-1">
+              <Sparkles size={14} /> Curated Picks
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">
+              {title}
+            </h2>
+            <p className="text-xs sm:text-sm text-stone-500 mt-1">{subtitle}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          {[...Array(limit)].map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-stone-200/80 p-4 animate-pulse">
+              <div className="aspect-square bg-stone-100 rounded-xl mb-3" />
+              <div className="h-3 bg-stone-200 rounded w-1/3 mb-2" />
+              <div className="h-4 bg-stone-200 rounded w-3/4 mb-3" />
+              <div className="h-8 bg-stone-200 rounded w-full" />
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  // If no featured products in database or API failed, don't show fake items
+  if (featured.length === 0) {
+    return null
+  }
 
   return (
     <section className="py-10 sm:py-14 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

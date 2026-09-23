@@ -3,8 +3,9 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Search, Heart, ShoppingBag, User, Store, Menu, X, Compass } from 'lucide-react'
-import { CATEGORIES } from '@/lib/products'
+import { Search, ShoppingBag, Heart, Menu, X, Compass, User, Store } from 'lucide-react'
+import { CATEGORIES, formatCategoriesList } from '@/lib/products'
+import { useCategoriesQuery } from '@/lib/api/queries'
 import { useCart } from '@/lib/cart-context'
 
 export function SiteHeader() {
@@ -12,6 +13,9 @@ export function SiteHeader() {
   const router = useRouter()
   const { cartCount, wishlist, setIsCartOpen, searchQuery, setSearchQuery, setIsTrackingOpen } = useCart()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const { data: apiCategories } = useCategoriesQuery()
+  const categories = React.useMemo(() => formatCategoriesList(apiCategories), [apiCategories])
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -175,7 +179,7 @@ export function SiteHeader() {
       <nav className="border-t border-[#EDE3D4]/80 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <ul className="flex items-center justify-start lg:justify-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar py-2.5 text-[11px] sm:text-xs font-semibold tracking-wider uppercase text-stone-600">
-            {CATEGORIES.map((cat) => {
+            {categories.map((cat) => {
               const isActive =
                 cat.slug === 'all'
                   ? pathname === '/'
@@ -207,7 +211,7 @@ export function SiteHeader() {
             Categories
           </p>
           <div className="flex flex-col gap-3 mb-6">
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.slug}
                 onClick={() => handleCategoryClick(cat.slug)}

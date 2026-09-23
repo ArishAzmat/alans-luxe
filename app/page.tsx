@@ -2,9 +2,9 @@
 
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Sparkles } from 'lucide-react'
-import { defaultProducts, CATEGORIES, Product, mapApiProductToProduct } from '@/lib/products'
-import { useProductsQuery } from '@/lib/api/queries'
+import { ArrowRight, Sparkles, RefreshCw, AlertCircle } from 'lucide-react'
+import { Product, mapApiProductToProduct, formatCategoriesList, CATEGORIES } from '@/lib/products'
+import { useProductsQuery, useCategoriesQuery, useBrandsQuery } from '@/lib/api/queries'
 import { HeroBanner } from '@/components/hero-banner'
 import { FeaturedProducts } from '@/components/featured-products'
 import { EditorialSection } from '@/components/editorial-section'
@@ -24,13 +24,36 @@ export default function HomePage() {
     sortBy: 'featured',
   })
 
-  // Live query to NestJS backend
-  const { data: apiResponse, isLoading: isApiLoading } = useProductsQuery({
+  // Live queries to NestJS backend
+  const {
+    data: apiResponse,
+    isLoading: isApiLoading,
+    isError: isApiError,
+    error: apiError,
+    refetch,
+  } = useProductsQuery({
     search: searchQuery || undefined,
     brand: filters.brand !== 'All' ? filters.brand : undefined,
     sort: filters.sortBy,
     limit: 50,
   })
+
+  const { data: apiCategories } = useCategoriesQuery()
+  const { data: apiBrands } = useBrandsQuery()
+
+  // Format dynamic categories & brands
+  const dynamicCategories = useMemo(
+    () => formatCategoriesList(apiCategories),
+    [apiCategories]
+  )
+
+  // Sourced strictly from live API data - no static fallback items
+  const allProducts = useMemo<Product[]>(() => {
+    if (apiResponse?.data && Array.isArray(apiResponse.data)) {
+      return apiResponse.data.map(mapApiProductToProduct)
+    }
+    return []
+  }, [apiResponse])
 
   // Route to specific category
   const handleCategoryNavigate = (slug: string) => {
@@ -41,21 +64,25 @@ export default function HomePage() {
     }
   }
 
-  // Combine live API products with local default products for seamless experience
-  const allProducts = useMemo<Product[]>(() => {
-    if (apiResponse?.data && apiResponse.data.length > 0) {
-      const liveProducts = apiResponse.data.map(mapApiProductToProduct)
-      // Merge unique items from defaultProducts (e.g. backpacks) if not in backend
-      const existingSlugs = new Set(liveProducts.map((p) => p.slug))
-      const extraDefaults = defaultProducts.filter((p) => !existingSlugs.has(p.slug))
-      return [...liveProducts, ...extraDefaults]
+  const dynamicBrands = useMemo(() => {
+    if (apiBrands && Array.isArray(apiBrands) && apiBrands.length > 0) {
+      return ['All', ...apiBrands.filter((b) => b !== 'All')]
     }
-    return defaultProducts
-  }, [apiResponse])
+    const brandsFromCatalog = Array.from(new Set(allProducts.map((p) => p.brand).filter(Boolean)))
+    if (brandsFromCatalog.length > 0) {
+      return ['All', ...brandsFromCatalog]
+    }
+    return ['All']
+  }, [apiBrands, allProducts])
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {
     let list = [...allProducts]
+
+    // Category filter (if applied locally on homepage)
+    if (filters.category !== 'all') {
+      list = list.filter((p) => p.categorySlug.toLowerCase() === filters.category.toLowerCase())
+    }
 
     // Search query filter (if client side)
     if (searchQuery.trim()) {
@@ -104,14 +131,15 @@ export default function HomePage() {
       {/* 1. Full-Width Hero Promotional Banner (Zouk style) */}
       <HeroBanner />
 
-      {/* 2. Featured Products Section (Directly below banner) */}
+      {/* 2. Featured Products Section (Directly below banner - Live from API) */}
       <FeaturedProducts
         title="Featured Collection"
-        subtitle="Artisanal backpacks & iconic designer handbags"
+        subtitle="Artisanal backpacks & iconic designer silhouettes from live catalog"
         limit={4}
+        products={allProducts.length > 0 ? allProducts : undefined}
       />
 
-      {/* 3. Pieces with Presence Editorial Section (Homepage specific as requested) */}
+      {/* 3. Pieces with Presence Editorial Section (Homepage specific) */}
       <EditorialSection />
 
       {/* 4. Main Product Listing Section */}
@@ -121,9 +149,9 @@ export default function HomePage() {
             <div>
               <h2 className="font-serif text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight flex items-center gap-2">
                 All Luxury Silhouettes
-                {apiResponse?.data && (
+                {apiResponse?.data && apiResponse.data.length > 0 && (
                   <span className="text-[10px] bg-emerald-100 text-emerald-800 font-sans font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Live API
+                    Live API ({apiResponse.data.length})
                   </span>
                 )}
               </h2>
@@ -139,16 +167,51 @@ export default function HomePage() {
           filters={filters}
           setFilters={setFilters}
           totalResults={filteredProducts.length}
-          availableCategories={CATEGORIES}
+          availableCategories={dynamicCategories}
+          availableBrands={dynamicBrands}
           onCategoryChange={handleCategoryNavigate}
           showCategoryPills={true}
         />
 
-        {/* Product Grid */}
-        {filteredProducts.length === 0 ? (
+        {/* API Error / Offline State */}
+        {isApiError && (
+          <div className="bg-amber-50/80 rounded-2xl border border-amber-200 p-8 sm:p-10 text-center my-8">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle size={24} />
+            </div>
+            <h3 className="font-serif text-xl font-bold text-stone-900 mb-1">
+              Backend Catalog Offline
+            </h3>
+            <p className="text-xs text-stone-600 max-w-md mx-auto mb-5">
+              Could not connect to the NestJS API server ({process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}). Showing 0 items until backend connection is established.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 bg-[#1b2a32] hover:bg-[#131e24] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+            >
+              <RefreshCw size={13} /> Retry Connection
+            </button>
+          </div>
+        )}
+
+        {/* Loading Skeletons */}
+        {isApiLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 my-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-stone-200/80 p-4 animate-pulse">
+                <div className="aspect-square bg-stone-100 rounded-xl mb-3" />
+                <div className="h-3 bg-stone-200 rounded w-1/3 mb-2" />
+                <div className="h-4 bg-stone-200 rounded w-3/4 mb-3" />
+                <div className="h-4 bg-stone-200 rounded w-1/2 mb-4" />
+                <div className="h-8 bg-stone-200 rounded w-full" />
+              </div>
+            ))}
+          </div>
+        ) : filteredProducts.length === 0 && !isApiError ? (
+          /* Empty Results State */
           <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center my-8">
             <h3 className="font-serif text-xl font-bold text-stone-800 mb-2">
-              No matching pieces found
+              0 matching pieces found
             </h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto mb-6">
               We couldn&apos;t find any items matching your selected criteria. Try resetting the filters or searching with different keywords.
@@ -168,6 +231,7 @@ export default function HomePage() {
             </button>
           </div>
         ) : (
+          /* Live Product Grid */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
@@ -192,7 +256,14 @@ export default function HomePage() {
             </p>
             <div>
               <button
-                onClick={() => setSelectedProduct(defaultProducts[0])}
+                onClick={() => {
+                  if (allProducts.length > 0) {
+                    setSelectedProduct(allProducts[0])
+                  } else {
+                    const el = document.getElementById('products-section')
+                    if (el) el.scrollIntoView({ behavior: 'smooth' })
+                  }
+                }}
                 className="inline-flex items-center gap-2 border border-[#C7A45C] text-[#FAF7F2] hover:bg-[#C7A45C] hover:text-[#1b2a32] px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
               >
                 Discover Athena Specs <ArrowRight size={14} />

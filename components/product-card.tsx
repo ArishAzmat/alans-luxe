@@ -14,10 +14,20 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const { toggleWishlist, isWishlisted, addToCart, setSelectedProduct } = useCart()
   const wished = isWishlisted(product.id)
+  const [imgSrc, setImgSrc] = React.useState(product.image)
+
+  React.useEffect(() => {
+    setImgSrc(product.image)
+  }, [product.image])
 
   const discountPercent = Math.round(
     ((product.originalPrice - product.price) / product.originalPrice) * 100
   )
+
+  const handleImageError = () => {
+    // Elegant fallback SVG placeholder if image fails to load
+    setImgSrc('https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=85')
+  }
 
   return (
     <article className="group bg-white rounded-2xl border border-stone-200/80 hover:border-stone-300 hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden">
@@ -27,8 +37,9 @@ export function ProductCard({ product }: ProductCardProps) {
         onClick={() => setSelectedProduct(product)}
       >
         <img
-          src={product.image}
+          src={imgSrc || 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=85'}
           alt={product.name}
+          onError={handleImageError}
           className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
           loading="lazy"
         />

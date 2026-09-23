@@ -34,6 +34,15 @@ export interface ApiProduct {
   variants?: ApiProductVariant[]
 }
 
+export interface ApiCategory {
+  id?: string
+  name: string
+  slug?: string
+  description?: string
+  image?: string
+  count?: number
+}
+
 export interface ProductsResponse {
   data: ApiProduct[]
   pagination: {
@@ -182,8 +191,27 @@ export async function fetchBrands(): Promise<string[]> {
   return request<string[]>('/brands')
 }
 
-export async function fetchCategories(): Promise<string[]> {
-  return request<string[]>('/categories')
+export async function fetchCategories(): Promise<ApiCategory[]> {
+  const result = await request<any>('/categories')
+  if (Array.isArray(result)) {
+    return result.map((item) => {
+      if (typeof item === 'string') {
+        return {
+          name: item,
+          slug: item.toLowerCase().replace(/\s+/g, '-'),
+        }
+      }
+      return {
+        id: item.id,
+        name: item.name,
+        slug: item.slug || (item.name ? item.name.toLowerCase().replace(/\s+/g, '-') : 'all'),
+        description: item.description,
+        image: item.image,
+        count: typeof item.count === 'number' ? item.count : undefined,
+      }
+    })
+  }
+  return []
 }
 
 // ---------------------------------------------------------------------------

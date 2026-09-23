@@ -3,8 +3,24 @@
 import React from 'react'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
+import { useProductsQuery } from '@/lib/api/queries'
+import { mapApiProductToProduct } from '@/lib/products'
+import { useCart } from '@/lib/cart-context'
 
 export function EditorialSection() {
+  const { setSelectedProduct } = useCart()
+  const { data: apiResponse } = useProductsQuery({ featured: true, limit: 2 })
+
+  const liveEditorial = React.useMemo(() => {
+    if (apiResponse?.data && apiResponse.data.length > 0) {
+      return apiResponse.data.map(mapApiProductToProduct)
+    }
+    return []
+  }, [apiResponse])
+
+  const item1 = liveEditorial[0]
+  const item2 = liveEditorial[1]
+
   return (
     <section id="collections" className="bg-[#FAF7F2] border-y border-[#EDE3D4] py-14 sm:py-20 my-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -39,36 +55,54 @@ export function EditorialSection() {
             </div>
           </div>
 
-          {/* Visual Showcase Right */}
-          <div className="lg:col-span-7 grid grid-cols-2 gap-4">
-            <div className="relative rounded-2xl overflow-hidden aspect-[4/5] shadow-md group">
-              <img
-                src="https://images.unsplash.com/photo-1594223274512-ad4803739b7c?auto=format&fit=crop&w=900&q=85"
-                alt="Woman carrying sculpted handbag"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-5">
-                <div className="text-white">
-                  <p className="text-[10px] uppercase tracking-widest text-[#C7A45C]">Signature</p>
-                  <p className="font-serif text-sm font-semibold">The Athena Top Handle</p>
+          {/* Visual Showcase Right - Sourced dynamically from Live API */}
+          {item1 && (
+            <div className="lg:col-span-7 grid grid-cols-2 gap-4">
+              <div
+                onClick={() => setSelectedProduct(item1)}
+                className="relative rounded-2xl overflow-hidden aspect-[4/5] shadow-md group cursor-pointer bg-stone-100"
+              >
+                <img
+                  src={item1.image}
+                  alt={item1.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-5">
+                  <div className="text-white">
+                    <p className="text-[10px] uppercase tracking-widest text-[#C7A45C]">
+                      {item1.brand}
+                    </p>
+                    <p className="font-serif text-sm font-semibold truncate max-w-[200px]">
+                      {item1.name}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="relative rounded-2xl overflow-hidden aspect-[4/5] shadow-md group mt-6">
-              <img
-                src="https://images.unsplash.com/photo-1566150905458-1bf1fc113f0d?auto=format&fit=crop&w=900&q=85"
-                alt="Polène Numéro Dix Half Moon"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-5">
-                <div className="text-white">
-                  <p className="text-[10px] uppercase tracking-widest text-[#C7A45C]">Equestrian Curve</p>
-                  <p className="font-serif text-sm font-semibold">Numéro Dix Crescent</p>
+              {item2 && (
+                <div
+                  onClick={() => setSelectedProduct(item2)}
+                  className="relative rounded-2xl overflow-hidden aspect-[4/5] shadow-md group mt-6 cursor-pointer bg-stone-100"
+                >
+                  <img
+                    src={item2.image}
+                    alt={item2.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-5">
+                    <div className="text-white">
+                      <p className="text-[10px] uppercase tracking-widest text-[#C7A45C]">
+                        {item2.brand}
+                      </p>
+                      <p className="font-serif text-sm font-semibold truncate max-w-[200px]">
+                        {item2.name}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </section>

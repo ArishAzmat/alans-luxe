@@ -3,17 +3,13 @@
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ChevronRight, Sparkles, Flame } from 'lucide-react'
+import { ChevronRight, Sparkles, Flame, AlertCircle, RefreshCw } from 'lucide-react'
 import {
   getCategoryInfo,
-  getProductsByCategory,
-  getBestsellerProducts,
-  getFeaturedProducts,
-  defaultProducts,
   Product,
   mapApiProductToProduct,
 } from '@/lib/products'
-import { useProductsQuery } from '@/lib/api/queries'
+import { useProductsQuery, useBrandsQuery } from '@/lib/api/queries'
 import { ProductCard } from '@/components/product-card'
 import { FilterSortBar, FilterState } from '@/components/filter-sort-bar'
 import { Footer } from '@/components/footer'
@@ -33,25 +29,46 @@ export default function CategoryPage() {
   })
 
   // Live query to NestJS backend for this category
-  const { data: apiResponse } = useProductsQuery({
-    category: categoryParam !== 'all' && categoryParam !== 'sale' ? categoryInfo.name : undefined,
+  const isSaleCategory = categoryParam.toLowerCase() === 'sale'
+  const isAllCategory = categoryParam.toLowerCase() === 'all'
+
+  const {
+    data: apiResponse,
+    isLoading,
+    isError,
+    refetch,
+  } = useProductsQuery({
+    category: !isAllCategory && !isSaleCategory ? categoryInfo.name : undefined,
     search: searchQuery || undefined,
     brand: filters.brand !== 'All' ? filters.brand : undefined,
     sort: filters.sortBy,
     limit: 50,
   })
 
-  // Combine live API data with local defaults
+  const { data: apiBrands } = useBrandsQuery()
+
+  // Sourced strictly from live backend API
   const catalogForCategory = useMemo<Product[]>(() => {
-    if (apiResponse?.data && apiResponse.data.length > 0) {
-      const liveProducts = apiResponse.data.map(mapApiProductToProduct)
-      const baseDefaults = getProductsByCategory(categoryParam, defaultProducts)
-      const existingSlugs = new Set(liveProducts.map((p) => p.slug))
-      const extraDefaults = baseDefaults.filter((p) => !existingSlugs.has(p.slug))
-      return [...liveProducts, ...extraDefaults]
+    if (apiResponse?.data && Array.isArray(apiResponse.data)) {
+      let list = apiResponse.data.map(mapApiProductToProduct)
+      if (isSaleCategory) {
+        list = list.filter((p) => p.originalPrice > p.price)
+      }
+      return list
     }
-    return getProductsByCategory(categoryParam, defaultProducts)
-  }, [apiResponse, categoryParam])
+    return []
+  }, [apiResponse, isSaleCategory])
+
+  const dynamicBrands = useMemo(() => {
+    if (apiBrands && Array.isArray(apiBrands) && apiBrands.length > 0) {
+      return ['All', ...apiBrands.filter((b) => b !== 'All')]
+    }
+    const brandsFromCatalog = Array.from(new Set(catalogForCategory.map((p) => p.brand).filter(Boolean)))
+    if (brandsFromCatalog.length > 0) {
+      return ['All', ...brandsFromCatalog]
+    }
+    return ['All']
+  }, [apiBrands, catalogForCategory])
 
   // Filter and sort
   const displayProducts = useMemo(() => {
@@ -98,22 +115,22 @@ export default function CategoryPage() {
     return list
   }, [catalogForCategory, searchQuery, filters])
 
-  // Recommendations to show below categorised products
-  const bestsellers = useMemo(() => {
-    return getBestsellerProducts(defaultProducts)
-      .filter((p) => p.categorySlug !== categoryParam)
-      .slice(0, 4)
-  }, [categoryParam])
+  // Live query for featured recommendations from other categories
+  const { data: featuredResponse } = useProductsQuery({ featured: true, limit: 8 })
 
-  const featuredOther = useMemo(() => {
-    return getFeaturedProducts(defaultProducts)
-      .filter((p) => p.categorySlug !== categoryParam)
-      .slice(0, 4)
-  }, [categoryParam])
+  const liveRecommendations = useMemo<Product[]>(() => {
+    if (featuredResponse?.data && Array.isArray(featuredResponse.data)) {
+      return featuredResponse.data
+        .map(mapApiProductToProduct)
+        .filter((p) => p.categorySlug.toLowerCase() !== categoryParam.toLowerCase())
+        .slice(0, 4)
+    }
+    return []
+  }, [featuredResponse, categoryParam])
 
   return (
     <main className="min-h-screen bg-[#FAF7F2]">
-      {/* Category Header Banner (Matching Zouk's "Backpack Collection" in reference screenshots) */}
+      {/* Category Header Banner */}
       <section className="bg-white border-b border-[#EDE3D4] py-8 sm:py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Breadcrumbs */}
@@ -131,7 +148,7 @@ export default function CategoryPage() {
             <div>
               <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-stone-900 tracking-tight flex items-center gap-3">
                 {categoryInfo.bannerTitle}
-                {apiResponse?.data && (
+                {apiResponse?.data && apiResponse.data.length > 0 && (
                   <span className="text-[10px] bg-emerald-100 text-emerald-800 font-sans font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                     Live API
                   </span>
@@ -154,20 +171,55 @@ export default function CategoryPage() {
 
       {/* Categorised Product Listing */}
       <section className="py-8 sm:py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Filter and Sort Bar (Zouk style: Filter ⌵, Sort By ⌵) */}
+        {/* Filter and Sort Bar */}
         <FilterSortBar
           filters={filters}
           setFilters={setFilters}
           totalResults={displayProducts.length}
+          availableBrands={dynamicBrands}
         />
 
-        {displayProducts.length === 0 ? (
+        {/* Error / Offline State */}
+        {isError && (
+          <div className="bg-amber-50/80 rounded-2xl border border-amber-200 p-8 sm:p-10 text-center my-8">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle size={24} />
+            </div>
+            <h3 className="font-serif text-xl font-bold text-stone-900 mb-1">
+              Unable to Fetch {categoryInfo.name}
+            </h3>
+            <p className="text-xs text-stone-600 max-w-md mx-auto mb-5">
+              Could not reach backend catalog. Showing 0 items.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 bg-[#1b2a32] hover:bg-[#131e24] text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+            >
+              <RefreshCw size={13} /> Retry Connection
+            </button>
+          </div>
+        )}
+
+        {/* Loading Skeletons */}
+        {isLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 my-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-stone-200/80 p-4 animate-pulse">
+                <div className="aspect-square bg-stone-100 rounded-xl mb-3" />
+                <div className="h-3 bg-stone-200 rounded w-1/3 mb-2" />
+                <div className="h-4 bg-stone-200 rounded w-3/4 mb-3" />
+                <div className="h-4 bg-stone-200 rounded w-1/2 mb-4" />
+                <div className="h-8 bg-stone-200 rounded w-full" />
+              </div>
+            ))}
+          </div>
+        ) : displayProducts.length === 0 && !isError ? (
           <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center my-8">
             <h3 className="font-serif text-xl font-bold text-stone-800 mb-2">
-              No products match these filters
+              0 products in {categoryInfo.name}
             </h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto mb-6">
-              We couldn&apos;t find any items in this category matching your selected filters.
+              There are currently 0 items matching your selection. Try resetting filters or exploring other collections.
             </p>
             <button
               onClick={() => {
@@ -192,17 +244,17 @@ export default function CategoryPage() {
         )}
       </section>
 
-      {/* Below that: Featured / Best Selling Recommendation Sections as requested */}
-      {bestsellers.length > 0 && (
+      {/* Recommendations Section (Live from API) */}
+      {liveRecommendations.length > 0 && (
         <section className="py-12 bg-white border-t border-[#EDE3D4]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#C7A45C] mb-1">
-                  <Flame size={14} className="text-amber-500" /> Customer Favourites
+                  <Flame size={14} className="text-amber-500" /> Curated Alternatives
                 </div>
                 <h2 className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-                  Best Selling in Other Collections
+                  Featured in Other Collections
                 </h2>
               </div>
               <Link
@@ -214,37 +266,7 @@ export default function CategoryPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-              {bestsellers.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Featured Picks Section */}
-      {featuredOther.length > 0 && (
-        <section className="py-12 bg-[#FAF7F2] border-t border-[#EDE3D4]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#C7A45C] mb-1">
-                  <Sparkles size={14} /> Spotlight
-                </div>
-                <h2 className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-                  Featured Artisanal Pieces
-                </h2>
-              </div>
-              <Link
-                href="/sale"
-                className="text-xs font-bold uppercase tracking-wider text-[#1b2a32] hover:text-[#b58e43]"
-              >
-                Explore Sale
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-              {featuredOther.map((product) => (
+              {liveRecommendations.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
