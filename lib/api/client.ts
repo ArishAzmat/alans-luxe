@@ -1,5 +1,18 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    // In browser: use relative /api-proxy route so requests are dynamically forwarded by the Next.js server using Cloud Run runtime env
+    return '/api-proxy'
+  }
+  // On server: use runtime container environment variable
+  return (
+    process.env.BACKEND_API_URL ||
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:4000/api'
+  )
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 export interface ApiProductVariant {
   id: string
